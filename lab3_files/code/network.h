@@ -435,7 +435,18 @@ int Network<T>::conv_convert(int layer_id, int padding, int stride, Array3D<T>& 
     printf("(%d %d) ", input_width, input_height);
     printf("(%d %d)\n", padded_ow, padded_oh);
 
-   
+    //zero out the array first otherwise I get shit like -1170624351
+    //channel -> width -> height
+    for (int c = 0; c < input_channel; c++) {
+        for (int w = 0; w < input_width; w++) {
+            for (int h = 0; h < input_height; h++) {
+//                printf("(%d, %d, %d)\n", h, w, c);
+                padded_ii[h][w][c] = 0;
+            }
+        }
+    }
+
+    //copy elements over
     //channel -> width -> height
     for (int c = 0; c < input_channel; c++) {
         for (int w = 0; w < input_width; w++) {
@@ -449,6 +460,9 @@ int Network<T>::conv_convert(int layer_id, int padding, int stride, Array3D<T>& 
     //input and kernel matrix dimensions
     int width = kernel_height * kernel_height * input_channel;
     int height = output_width * output_height;
+    printf("output width: %d output height: %d\n", output_width, output_height);
+    printf("padded output width: %d padded output height: %d\n", padded_ow, padded_oh);
+    printf("output matrix width: %d output matrix height: %d\n", width, height);
     input_matrix.resize(width, height);
     kernel_matrix.resize(filters, width);
     
@@ -468,7 +482,7 @@ int Network<T>::conv_convert(int layer_id, int padding, int stride, Array3D<T>& 
                     }
                 }
             }
-            ++col;
+            col++;
         }
     }
 
