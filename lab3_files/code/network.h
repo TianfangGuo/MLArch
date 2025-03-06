@@ -393,13 +393,13 @@ int Network<T>::conv_convert(int layer_id, int padding, int stride, Array3D<T>& 
     //DEBUG PRINT STATEMENTS
     
     printf("entering conv_convert()\n");
-    printf("3d: %d ", initial_input.Size_3d()); 
+    printf("input_height: %d ", initial_input.Size_3d()); 
     //printf("\n");
-    printf("%d ", initial_input.Size_2d());
+    printf("input_width: %d ", initial_input.Size_2d());
     //printf("\n");
-    printf("%d ", initial_input.Size_1d());
+    printf("input_channel: %d ", initial_input.Size_1d());
     printf("\n");
-    printf("4d: %d %d %d %d\n", initial_kernel.Size_4d(), initial_kernel.Size_3d(), initial_kernel.Size_2d(), initial_kernel.Size_1d());
+    printf("filters: %d kernel_height: %d kernel_width: %d kernel_channel: %d\n", initial_kernel.Size_4d(), initial_kernel.Size_3d(), initial_kernel.Size_2d(), initial_kernel.Size_1d());
     printf("padding: %d stride: %d\n", padding, stride);    
 
     int input_height = initial_input.Size_3d();
@@ -438,8 +438,8 @@ int Network<T>::conv_convert(int layer_id, int padding, int stride, Array3D<T>& 
     //zero out the array first otherwise I get shit like -1170624351
     //channel -> width -> height
     for (int c = 0; c < input_channel; c++) {
-        for (int w = 0; w < input_width; w++) {
-            for (int h = 0; h < input_height; h++) {
+        for (int w = 0; w < padded_ow; w++) {
+            for (int h = 0; h < padded_oh; h++) {
 //                printf("(%d, %d, %d)\n", h, w, c);
                 padded_ii[h][w][c] = 0;
             }
@@ -448,11 +448,12 @@ int Network<T>::conv_convert(int layer_id, int padding, int stride, Array3D<T>& 
 
     //copy elements over
     //channel -> width -> height
-    for (int c = 0; c < input_channel; c++) {
+    for (int h = 0; h < input_height; h++) {
         for (int w = 0; w < input_width; w++) {
-            for (int h = 0; h < input_height; h++) {
+            for (int c = 0; c < input_channel; c++) {
 //                printf("(%d, %d, %d)\n", h, w, c);
-                padded_ii[h][w][c] = initial_input[h][w][c];
+                padded_ii[h+padding][w+padding][c] = initial_input[h][w][c];
+
             }
         }
     }
@@ -463,21 +464,23 @@ int Network<T>::conv_convert(int layer_id, int padding, int stride, Array3D<T>& 
     printf("output width: %d output height: %d\n", output_width, output_height);
     printf("padded output width: %d padded output height: %d\n", padded_ow, padded_oh);
     printf("output matrix width: %d output matrix height: %d\n", width, height);
-    input_matrix.resize(width, height);
-    kernel_matrix.resize(filters, width);
+    printf("kernel_matrix dimensions(%d, %d)\n", width, filters);
+    input_matrix.resize(height, width);
+    //kernel_matrix.resize(filters, width);
+    kernel_matrix.resize(width, filters);
     
-    // Construct input_matrix
+    // //Construct input_matrix
     int col = 0;
     for (int h_out = 0; h_out < output_height; h_out++) {
         for (int w_out = 0; w_out < output_width; w_out++) {
             int row = 0;
-            // For expansion order: Channel → Width → Height
-            for (int c = 0; c < input_channel; c++) {
+            
+            for (int h = 0; h < kernel_height; h++) {
                 for (int w = 0; w < kernel_height; w++) {
-                    for (int h = 0; h < kernel_height; h++) {
+                    for (int c = 0; c < input_channel; c++) {
                         int h_in = h_out * stride + h;
                         int w_in = w_out * stride + w;
-                        input_matrix[row][col] = padded_ii[h_in][w_in][c];
+                        input_matrix[col][row] = padded_ii[h_in][w_in][c];
                         row++;
                     }
                 }
@@ -489,12 +492,11 @@ int Network<T>::conv_convert(int layer_id, int padding, int stride, Array3D<T>& 
     // Construct kernel_matrix
     for (int i = 0; i < filters; i++) {
         int idx = 0;
-        // For expansion order: Channel → Width → Height
-        for (int c = 0; c < input_channel; c++) {
-            for (int w = 0; w < kernel_height; w++) {
-                for (int h = 0; h < kernel_height; h++) {
-                    // initial_kernel dimensions: [filter][height][width][channel]
-                    kernel_matrix[i][idx] = initial_kernel[i][h][w][c];
+        for (int h = 0; h < kernel_height; h++) {
+            for (int w = 0; w < kernel_width; w++) {
+                for (int c = 0; c < kernel_channel; c++) {
+                    kernel_matrix[idx][i] = initial_kernel[i][h][w][c];
+                    //printf("value = %d, idx=%d, i=%d, c=%d, w=%d, h=%d\n", kernel_matrix[idx][i], idx, i, c, w, h);
                     idx++;
                 }
             }
@@ -511,6 +513,14 @@ int Network<T>::conv_convert_stream(int layer_id, int padding, int stride, Strea
     T buffer[buffer_size];
     /* Part III */
     /*Write your code here*/
+
+    int input_w = input_width[layer_id];
+    int input_h = input_height[layer_id];
+    int input_c = input_channel[layer_id];
+    int kernel_sz = kernel_size[layer_id];
+    //int filters = kernel_filters[layer_id];
+
+    printf("%d, %d, %d, %d\n", input_w, input_h, input_c, kernel_sz);
 
     return 0;
 }
