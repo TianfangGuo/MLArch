@@ -535,7 +535,7 @@ int Network<T>::conv_convert_stream(int layer_id, int padding, int stride, Strea
     printf("(%d, %d)\n", output_w, output_h);
     */
 
-
+    //init
     int current_padded_row = 0;
     for (int r = 0; r < kernel_sz; r++) {
         if (current_padded_row < padding || current_padded_row >= (padding + input_h)) {
@@ -549,6 +549,7 @@ int Network<T>::conv_convert_stream(int layer_id, int padding, int stride, Strea
             for (int i = 0; i < input_w * input_c; i++) {
                 if (!input.empty())
                     buffer[r * padded_w * input_c + padding * input_c + i] = input.read();
+                    //printf("input: %d\n", buffer[r * padded_w * input_c + padding * input_c + i]);
                 else
                     buffer[r * padded_w * input_c + padding * input_c + i] = 0;
             }
@@ -559,25 +560,24 @@ int Network<T>::conv_convert_stream(int layer_id, int padding, int stride, Strea
         current_padded_row++;
     }
 
-    // sliding...
-    for (int i = 0; i < output_h; i++) {          // Vertical sliding.
-        for (int j = 0; j < output_w; j++) {      // Horizontal sliding.
+    //current window
+    for (int i = 0; i < output_h; i++) {//Vertical
+        for (int j = 0; j < output_w; j++) {//Horizontal
             int col_base = j * stride;
             for (int kr = 0; kr < kernel_sz; kr++) {
                 for (int kc = 0; kc < kernel_sz; kc++) {
                     for (int ch = 0; ch < input_c; ch++) {
-                        // Compute the index inside the buffered patch.
                         int index = kr * padded_w * input_c + ((col_base + kc) * input_c) + ch;
                         T value = buffer[index];
+                        //printf("current buffer value: %d\n", buffer[index]);
                         output.write(value);
                     }
                 }
             }
         }
+        //slide down to next window
         if (i < output_h - 1) {
-            // Shift the buffer upward by 'stride' rows.
             for (int s = 0; s < stride; s++) {
-                // Shift rows: row0 becomes row1, row1 becomes row2,...
                 for (int r = 0; r < kernel_sz - 1; r++) {
                     for (int c = 0; c < padded_w * input_c; c++) {
                         buffer[r * padded_w * input_c + c] = buffer[(r + 1) * padded_w * input_c + c];
@@ -595,6 +595,7 @@ int Network<T>::conv_convert_stream(int layer_id, int padding, int stride, Strea
                         for (int i = 0; i < input_w * input_c; i++) {
                             if (!input.empty())
                                 buffer[(kernel_sz-1) * padded_w * input_c + padding * input_c + i] = input.read();
+                                //printf("input: %d\n", buffer[r * padded_w * input_c + padding * input_c + i]);
                             else
                                 buffer[(kernel_sz-1) * padded_w * input_c + padding * input_c + i] = 0;
                         }
