@@ -4,7 +4,7 @@
 #include "test.h"
 
 int main(int argc, char **argv) {
-    Test<int> *test = new Test<int>("./example_2/network_2"); // set benchmark
+    Test<int> *test = new Test<int>("./example_3/network_3"); // set benchmark
     test->initialize();
     test->generate_parameter_file();
 

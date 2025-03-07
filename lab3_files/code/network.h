@@ -392,15 +392,15 @@ int Network<T>::conv_convert(int layer_id, int padding, int stride, Array3D<T>& 
     
     //DEBUG PRINT STATEMENTS
     
-    printf("entering conv_convert()\n");
-    printf("input_height: %d ", initial_input.Size_3d()); 
-    //printf("\n");
-    printf("input_width: %d ", initial_input.Size_2d());
-    //printf("\n");
-    printf("input_channel: %d ", initial_input.Size_1d());
-    printf("\n");
-    printf("filters: %d kernel_height: %d kernel_width: %d kernel_channel: %d\n", initial_kernel.Size_4d(), initial_kernel.Size_3d(), initial_kernel.Size_2d(), initial_kernel.Size_1d());
-    printf("padding: %d stride: %d\n", padding, stride);    
+    // printf("entering conv_convert()\n");
+    // printf("input_height: %d ", initial_input.Size_3d()); 
+    // //printf("\n");
+    // printf("input_width: %d ", initial_input.Size_2d());
+    // //printf("\n");
+    // printf("input_channel: %d ", initial_input.Size_1d());
+    // printf("\n");
+    // printf("filters: %d kernel_height: %d kernel_width: %d kernel_channel: %d\n", initial_kernel.Size_4d(), initial_kernel.Size_3d(), initial_kernel.Size_2d(), initial_kernel.Size_1d());
+    // printf("padding: %d stride: %d\n", padding, stride);    
 
     int input_height = initial_input.Size_3d();
     int input_width = initial_input.Size_2d();
@@ -432,8 +432,8 @@ int Network<T>::conv_convert(int layer_id, int padding, int stride, Array3D<T>& 
     int padded_ow = input_width + padding*2;
     int padded_oh = input_height + padding*2;
     Array3D<T> padded_ii(padded_oh, padded_ow, input_channel);
-    printf("(%d %d) ", input_width, input_height);
-    printf("(%d %d)\n", padded_ow, padded_oh);
+//    printf("(%d %d) ", input_width, input_height);
+//   printf("(%d %d)\n", padded_ow, padded_oh);
 
     //zero out the array first otherwise I get shit like -1170624351
     //channel -> width -> height
@@ -461,10 +461,12 @@ int Network<T>::conv_convert(int layer_id, int padding, int stride, Array3D<T>& 
     //input and kernel matrix dimensions
     int width = kernel_height * kernel_height * input_channel;
     int height = output_width * output_height;
+    /*
     printf("output width: %d output height: %d\n", output_width, output_height);
     printf("padded output width: %d padded output height: %d\n", padded_ow, padded_oh);
     printf("output matrix width: %d output matrix height: %d\n", width, height);
     printf("kernel_matrix dimensions(%d, %d)\n", width, filters);
+    */
     input_matrix.resize(height, width);
     //kernel_matrix.resize(filters, width);
     kernel_matrix.resize(width, filters);
@@ -514,14 +516,101 @@ int Network<T>::conv_convert_stream(int layer_id, int padding, int stride, Strea
     /* Part III */
     /*Write your code here*/
 
+    //VARIABLES
     int input_w = input_width[layer_id];
     int input_h = input_height[layer_id];
     int input_c = input_channel[layer_id];
     int kernel_sz = kernel_size[layer_id];
-    //int filters = kernel_filters[layer_id];
+    int padded_w = input_w + padding*2;
+    int padded_h = input_h + padding*2;
 
-    printf("%d, %d, %d, %d\n", input_w, input_h, input_c, kernel_sz);
+    int output_w = (padded_w - kernel_sz)/stride + 1;
+    int output_h = (padded_h - kernel_sz)/stride + 1;
+    
+    //printf("%d, %d, %d, %d\n", input_w, input_h, input_c, kernel_sz);
 
+    /*
+    printf("%d %d %d %d\n", input_w, input_h, input_c, kernel_sz);
+    printf("(%d, %d)\n", padded_w, padded_h);
+    printf("(%d, %d)\n", output_w, output_h);
+    */
+
+
+    int current_padded_row = 0;
+    for (int r = 0; r < kernel_sz; r++) {
+        if (current_padded_row < padding || current_padded_row >= (padding + input_h)) {
+            for (int i = 0; i < padded_w * input_c; i++) {
+                buffer[r * padded_w * input_c + i] = 0;
+            }
+        } else {
+            for (int i = 0; i < padding * input_c; i++) {
+                buffer[r * padded_w * input_c + i] = 0;
+            }
+            for (int i = 0; i < input_w * input_c; i++) {
+                if (!input.empty())
+                    buffer[r * padded_w * input_c + padding * input_c + i] = input.read();
+                else
+                    buffer[r * padded_w * input_c + padding * input_c + i] = 0;
+            }
+            for (int i = padding * input_c + input_w * input_c; i < padded_w * input_c; i++) {
+                buffer[r * padded_w * input_c + i] = 0;
+            }
+        }
+        current_padded_row++;
+    }
+
+    // sliding...
+    for (int i = 0; i < output_h; i++) {          // Vertical sliding.
+        for (int j = 0; j < output_w; j++) {      // Horizontal sliding.
+            int col_base = j * stride;
+            for (int kr = 0; kr < kernel_sz; kr++) {
+                for (int kc = 0; kc < kernel_sz; kc++) {
+                    for (int ch = 0; ch < input_c; ch++) {
+                        // Compute the index inside the buffered patch.
+                        int index = kr * padded_w * input_c + ((col_base + kc) * input_c) + ch;
+                        T value = buffer[index];
+                        output.write(value);
+                    }
+                }
+            }
+        }
+        if (i < output_h - 1) {
+            // Shift the buffer upward by 'stride' rows.
+            for (int s = 0; s < stride; s++) {
+                // Shift rows: row0 becomes row1, row1 becomes row2,...
+                for (int r = 0; r < kernel_sz - 1; r++) {
+                    for (int c = 0; c < padded_w * input_c; c++) {
+                        buffer[r * padded_w * input_c + c] = buffer[(r + 1) * padded_w * input_c + c];
+                    }
+                }
+                if (current_padded_row < padded_h) {
+                    if (current_padded_row < padding || current_padded_row >= (padding + input_h)) {
+                        for (int i = 0; i < padded_w * input_c; i++) {
+                            buffer[(kernel_sz-1) * padded_w * input_c + i] = 0;
+                        }
+                    } else {
+                        for (int i = 0; i < padding * input_c; i++) {
+                            buffer[(kernel_sz-1) * padded_w * input_c + i] = 0;
+                        }
+                        for (int i = 0; i < input_w * input_c; i++) {
+                            if (!input.empty())
+                                buffer[(kernel_sz-1) * padded_w * input_c + padding * input_c + i] = input.read();
+                            else
+                                buffer[(kernel_sz-1) * padded_w * input_c + padding * input_c + i] = 0;
+                        }
+                        for (int i = padding * input_c + input_w * input_c; i < padded_w * input_c; i++) {
+                            buffer[(kernel_sz-1) * padded_w * input_c + i] = 0;
+                        }
+                    }
+                } else {  
+                    for (int c = 0; c < padded_w * input_c; c++) {
+                        buffer[(kernel_sz - 1) * padded_w * input_c + c] = 0;
+                    }
+                }
+                current_padded_row++;
+            }
+        }
+    }
     return 0;
 }
 
